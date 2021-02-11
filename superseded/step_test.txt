@@ -1,0 +1,12 @@
+
+def get_force(t):
+    if t > 1:
+        return 4.29E-6
+    else:
+        return 0
+
+
+theta = 0
+
+while True:
+    
