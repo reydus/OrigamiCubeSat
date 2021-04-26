@@ -75,24 +75,12 @@ def main():
         state = 0
         )
     order.append(panel_ors["2"].frame)
-    
-    '''
-    #PANEL GENERATOR FOR LOOP.
-    
-    for i in range(1, n+1):
-    # for each panel, create a new reference frame.
-        panel_ors[i] = Panel(
-        dimensions=5,
-        frame = order[i-1].orientnew("panel"+str(i), "Axis", [theta_zero, bus.z]),
-        state = 1
-        )
-        order.append(panel_ors[i].frame)
-    '''
+
     
     upd = 3.6**-1 # hertz
     t= 1/upd
     omega_0 = 0
-    #return panel_ors
+
     
     for panel in panel_ors:
         
@@ -173,31 +161,22 @@ def main():
     figtheta, axtheta = plt.subplots()  # Create a figure and an axes.
     for i in panel_ors:
         axtheta.plot(x_axis, panel_ors[i].y_axis_theta, label="Panel no. "+i)
-        #axtheta.plot([0,c*t], [panel_ors[i].y_axis_theta[-1], panel_ors[i].y_axis_theta[-1]], "r--")     # Draw dashed line at y point of convergence
     axtheta.set_xlabel('Time (s)')  # Add an x-label to the axes.
     axtheta.set_ylabel('Panel angle (rads)')  # Add a y-label to the axes.
     axtheta.set_title("Angle plot against time, initial theta ="+str(round(theta_zero.evalf(),2)))  # Add a title to the axes.
     axtheta.grid(True)
     axtheta.legend()
 
-    #figtheta.savefig("theta_plot.fig")
-    #figtheta.savefig("theta_plot.png")
-    #axtheta.grid(axis="both", linestyle='-', linewidth=2)
-
     ########## PLOT FORCES
     figforce, axforce = plt.subplots()
 
     for i in panel_ors:
         axforce.plot(x_axis, panel_ors[i].y_axis_force, label="Panel no. "+i)
-        #axforce.plot([0, c*t],[y_axis_force[-1],y_axis_force[-1]], "r--")
     axforce.set_xlabel("Time (s)")
     axforce.set_ylabel("SRP Force (N)")
     axforce.set_title("Force plot against time, initial theta ="+str(round(theta_zero.evalf(),2)))
     axforce.grid(True)
     axforce.legend()
-    #axforce.savefig("force_plot.fig")
-    #figforce.savefig("force_plot.png")
-    #axforce.grid(axis="both", linestyle='-', linewidth=2)
 
     ########## PLOT MOMENTS
     figmoment, axmoment = plt.subplots()
@@ -205,35 +184,23 @@ def main():
         axmoment.plot(x_axis, panel_ors[i].y_axis_moment_spr, label="Spring Moment no. "+i)
         axmoment.plot(x_axis, panel_ors[i].y_axis_moment_srp, label="SRP Moment no. "+i)
         axmoment.plot(x_axis, panel_ors[i].y_axis_moment_dam, label="Damper Moment no. "+i)
-        #axmoment.plot([0,c*t],[np.mean(y_axis_moment_srp[-convergence_mean:]),np.mean(y_axis_moment_srp[-convergence_mean:])], "r--")
     axmoment.set_xlabel("Time (s)")
     axmoment.set_ylabel("Moment (N*m)")
     axmoment.set_title("Moment plot against time, initial theta ="+str(round(theta_zero.evalf(),2)))
     axmoment.legend()
     axmoment.grid(True)
-    #axmoment.savefig("moment_plot.fig")
-    #figmoment.savefig("moment_plot.png")
-    #axmoment.grid(axis="both", linestyle='-', linewidth=2)
-    
 
     ########## PLOT SPEEDS
     figspeed, axspeed = plt.subplots()
     for i in panel_ors:
         axmoment.plot(x_axis, panel_ors[i].y_axis_speed, label="Angular speed no. "+i)
-        #axspeed.plot(x_axis, y_axis_speed)
-        #axspeed.plot([0,c*t],[0,0], "r--")
     axspeed.set_xlabel("Time (s)")
     axspeed.set_ylabel("Angular velocity (Rads/s)")
     axspeed.set_title("Angular velocity plot against time, initial theta ="+str(round(theta_zero.evalf(),2)))
     axspeed.grid(True)
-    #axspeed.savefig("speed_plot.fig")
-    #figspeed.savefig("speed_plot.png")
-    #axspeed.grid(axis="both", linestyle='-', linewidth=2)
-
 
     draw_scene(panel_ors, bus)
 
-    #plt.show()
     return panel_ors, bus
 
 
@@ -357,11 +324,7 @@ def draw_scene(panel_ors, sat):
     hub.set_color("darkgray")
     hub.set_edgecolor("k")
     ax.add_collection3d(hub)
-    '''
-    for i in range(3):
-        piece = make_triangles(0/180 * math.pi, i)
-        ax.add_collection3d(piece)
-    '''
+
     for i in panel_ors:
         piece = make_triangles(panel_ors[i].y_axis_theta[-1], int(i)-1)
         #ax.add_collection3d(piece)
@@ -371,8 +334,6 @@ def draw_scene(panel_ors, sat):
             piece.set_color("blue")
         ax.add_collection3d(piece)
     
-    
-    #hubs = ax.add_collection3d(hub)
 
     # Setting the axes properties
     ax.set_xlim3d([-l, l])
