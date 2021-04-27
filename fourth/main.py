@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.animation as animation
 from matplotlib import style
-
-#bus = mech.ReferenceFrame("bus")
+import os.path
+from datetime import datetime
 
 
 class Panel:
@@ -47,7 +47,7 @@ def calc_torque(panel, force, bus):
     return force_z
 
 def main():
-    theta_zero = 16.24/180 * sp.pi#10/180 * sp.pi
+    theta_zero = 30/180 * sp.pi#10/180 * sp.pi
     bus = sun.orientnew("bus", "Axis", [angle_to_sun, sun.z])
     order = [bus]
 
@@ -56,11 +56,9 @@ def main():
     panel_ors["1"] = Panel(
         dimensions=5,
         frame = bus.orientnew("panel"+str(1), "Axis", [theta_zero, bus.z]),
-        state = 1
+        state = 0
         )
     order.append(panel_ors["1"].frame)
-    
-    
     
     panel_ors["2"] = Panel(
         dimensions=5,
@@ -71,10 +69,10 @@ def main():
 
     panel_ors["3"] = Panel(
         dimensions=5,
-        frame = bus.orientnew("panel"+str(2), "Axis", [theta_zero, bus.z]),
+        frame = bus.orientnew("panel"+str(3), "Axis", [theta_zero, bus.z]),
         state = 0
         )
-    order.append(panel_ors["2"].frame)
+    order.append(panel_ors["3"].frame)
 
     
     upd = 3.6**-1 # hertz
@@ -94,6 +92,7 @@ def main():
         panel.y_axis_moment_spr = []
         panel.y_axis_moment_dam = []
         panel.y_axis_speed = []
+        panel.timeStep = t
         bus_location = 1.5 * sun.x # location in AU referenced on the sun frame.
         omega_0 = 0 * panel.frame.z
         spring_trigger= 0
@@ -122,14 +121,14 @@ def main():
             panel.y_axis_moment_dam.append(mech.dot(damper, bus.z).evalf())
             panel.y_axis_speed.append(mech.dot(omega_0, bus.z).evalf())
 
-            if c > 1000:
+            if c > 2000:
                 print("Iteration limit reached, escaping...")
                 panel.iterations = c
                 break
             
             if c > 1 and threshold(np.mean(np.abs(np.diff(panel.y_axis_theta[-convergence_mean:]))), 0, thresh=0.0001):
                 print("Solution found after "+str(c)+" iterations")
-                print("Force: "+"%.3g" % (2*n*panel.y_axis_force[-1])+"N")
+                #print("Force: "+"%.3g" % (2*n*panel.y_axis_force[-1])+"N")
                 panel.iterations = c
                 break
             
@@ -138,11 +137,25 @@ def main():
                 print("Force: "+"%.3g" % (2*n*panel.y_axis_force[-1])+"N")
                 break
     
+    # Print total pressure force felt.
+    totalForce = 0
+    for i in panel_ors:
+        totalForce += panel_ors[i].y_axis_force[-1]
+    hubForce = panel_ors["1"].area * calc_srp(bus_location, bus) # Simulate hub as a de-activated panel.
+    totalForce += mech.dot(hubForce, bus.y)
+
+    
+    print("Total force due to SRP: "+str(totalForce)+" Newtons")
+
+
     # Retrieve maximum number of iterations.
     maxIterations = 0
     for i in panel_ors:
         if maxIterations < panel_ors[i].iterations:
             maxIterations = panel_ors[i].iterations
+
+    # Create array with absolute time values from start of simulation to end.
+    x_axis = np.linspace(0.0, maxIterations*t, maxIterations)
     
     # Auto-complete for any panel that converges faster than the slowest one.
     for i in panel_ors:
@@ -152,10 +165,7 @@ def main():
         panel_ors[i].y_axis_moment_spr = auto_complete(panel_ors[i].y_axis_moment_spr, maxIterations)
         panel_ors[i].y_axis_moment_dam = auto_complete(panel_ors[i].y_axis_moment_dam, maxIterations)
         panel_ors[i].y_axis_speed = auto_complete(panel_ors[i].y_axis_speed, maxIterations)
-
-
-    x_axis = np.linspace(0.0, maxIterations*t, maxIterations)
-
+        panel_ors[i].x_axis = x_axis
 
     ########## PLOT THETAS
     figtheta, axtheta = plt.subplots()  # Create a figure and an axes.
@@ -193,7 +203,7 @@ def main():
     ########## PLOT SPEEDS
     figspeed, axspeed = plt.subplots()
     for i in panel_ors:
-        axmoment.plot(x_axis, panel_ors[i].y_axis_speed, label="Angular speed no. "+i)
+        axspeed.plot(x_axis, panel_ors[i].y_axis_speed, label="Angular speed no. "+i)
     axspeed.set_xlabel("Time (s)")
     axspeed.set_ylabel("Angular velocity (Rads/s)")
     axspeed.set_title("Angular velocity plot against time, initial theta ="+str(round(theta_zero.evalf(),2)))
@@ -269,7 +279,7 @@ def draw_scene(panel_ors, sat):
     import math
     def make_triangles(alpha=90/180 * math.pi, transformation=0):
         #alpha = 90/180 * math.pi
-        print("Painting triangle with "+str(alpha)+"rads")
+        #print("Painting triangle with "+str(alpha)+"rads")
         tria = np.zeros((3,3))
         h = 3**(1/2)/2 * l
 
@@ -307,6 +317,15 @@ def draw_scene(panel_ors, sat):
             elif panel_ors[i].state == 1:
                 piece.set_color("blue")
             ax.add_collection3d(piece)
+        timeElapsed = "{:.2f}".format(panel_ors["1"].x_axis[num]).zfill(timeStampLen)
+        timeLabel.set_text("t = "+timeElapsed+" seconds")
+        frameRef = animation_id+"_"+str(str(num).zfill(4))
+        print("frame ref is "+frameRef)
+        fname = "fourth\\frames\\"+frameRef+".png"
+        if not os.path.isfile(fname):
+            print("Saving file "+fname)
+            fig.savefig(fname)
+
         
     # Attaching 3D axis to the figure
     fig = plt.figure()
@@ -346,7 +365,11 @@ def draw_scene(panel_ors, sat):
     ax.set_zlabel('Z')
 
     ax.set_title('3D Test')
+    timeLabel = ax.text2D(0.05, 0.95, "t = {:.2f}".format(0.00), transform=ax.transAxes)
 
+    
+    timeStampLen = len(str(int(panel_ors["1"].x_axis[-1] // 1 + 1))) + 3 # number of digits of last timestamp rounded up to the highest unit, plus one period plus 2 decimal digits.
+    fig.savefig("fourth\\frames\\test frame.png")
     # Creating the Animation object
     line_ani = animation.FuncAnimation(fig, update_lines, panel_ors["1"].iterations, fargs=(panel_ors,),
                                    interval=50, blit=False)
@@ -370,6 +393,14 @@ if __name__ == "__main__":
 
     n = 3
 
+    animation_id = [datetime.now().day,datetime.now().month, datetime.now().hour, datetime.now().minute, datetime.now().second]
+    
+    for i in range(0, len(animation_id)):
+        animation_id[i] = str(animation_id[i])
+    
+    animation_id = "_".join(animation_id)
+
+    
     panel_ors = {}
     panel_ors, bus = main()
     
