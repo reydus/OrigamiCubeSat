@@ -38,20 +38,27 @@ def get_MOI_triangle(l, rho):
 
 
 def calc_torque(panel, force, bus):
-    force_z = mech.dot(force, bus.y) * sp.cos(get_angle(panel.frame, bus))
+
+    # If panel has gone beyond the direction of the bus, it's completely in the shadow.
+    if get_angle(panel.frame, bus) < - sp.pi /2:
+        force_z = 0
+    else:
+        #force_z = mech.dot(force, bus.y) * sp.cos(get_angle(panel.frame, bus)) ** 2
+        force_z = (sp.cos(get_angle(panel.frame, bus))*force.magnitude())
+    # If the light hits on the front of the panel, use state to determine a coefficient of reflection.
     if force_z > 0:
-        force_z = force_z * (1+panel.state)  # if the light hits on the front of the panel, use state to determine a coefficient of reflection.
+        force_z = force_z * (1+panel.state)  
     #force_z = mech.dot(force, panel.frame.y).evalf()
     torque_zz = - panel.dimensions[0]*3**(1/2)/6 * force_z
     panel.torque = 0*panel.frame.y + 0*panel.frame.x + torque_zz*panel.frame.z
     return force_z
 
 def main():
-    theta_zero = 30/180 * sp.pi#10/180 * sp.pi
+    theta_zero = 100/180 * sp.pi#10/180 * sp.pi
     bus = sun.orientnew("bus", "Axis", [angle_to_sun, sun.z])
     order = [bus]
 
-    # MANUAL GENERATION FOR TWO PANELS.
+    # MANUAL GENERATION FOR PANELS.
     
     panel_ors["1"] = Panel(
         dimensions=5,
@@ -59,11 +66,11 @@ def main():
         state = 0
         )
     order.append(panel_ors["1"].frame)
-    
+    '''
     panel_ors["2"] = Panel(
         dimensions=5,
         frame = bus.orientnew("panel"+str(2), "Axis", [theta_zero, bus.z]),
-        state = 0
+        state = 1
         )
     order.append(panel_ors["2"].frame)
 
@@ -73,7 +80,7 @@ def main():
         state = 0
         )
     order.append(panel_ors["3"].frame)
-
+    '''
     
     upd = 3.6**-1 # hertz
     t= 1/upd
@@ -85,7 +92,8 @@ def main():
         panel = panel_ors[panel]
         c = 0
         alpha = 0 *panel.frame.z
-        theta = sp.acos(mech.dot(panel.frame.x, bus.x).evalf()) * panel.frame.z
+        #theta = sp.acos(mech.dot(panel.frame.x, bus.x).evalf()) * panel.frame.z
+        theta = get_angle(panel.frame, bus) * panel.frame.z
         panel.y_axis_theta = []
         panel.y_axis_force = []
         panel.y_axis_moment_srp = []
@@ -98,7 +106,7 @@ def main():
         spring_trigger= 0
 
         while True:
-            f = panel.area * (1+panel.state)* calc_srp(bus_location, bus)
+            f = panel.area * (1+panel.state)* calc_srp(bus_location, bus) * sp.cos(get_angle(panel.frame, bus))
             angled_force = calc_torque(panel, f, bus)
 
             spring = get_spring_moment(panel.frame, bus)
@@ -126,17 +134,17 @@ def main():
                 panel.iterations = c
                 break
             
-            if c > 1 and threshold(np.mean(np.abs(np.diff(panel.y_axis_theta[-convergence_mean:]))), 0, thresh=0.0001):
+            if c > 25 and threshold(np.mean(np.abs(np.diff(panel.y_axis_theta[-convergence_mean:]))), 0, thresh=0.0001):
                 print("Solution found after "+str(c)+" iterations")
                 #print("Force: "+"%.3g" % (2*n*panel.y_axis_force[-1])+"N")
                 panel.iterations = c
                 break
-            
+            '''
             if abs(get_angle(panel.frame, bus)) > sp.pi.evalf()/2:
                 print("Exception ocurred: Panel rotated more than 90 degrees.")
                 print("Force: "+"%.3g" % (2*n*panel.y_axis_force[-1])+"N")
                 break
-    
+            '''
     # Print total pressure force felt.
     totalForce = 0
     for i in panel_ors:
@@ -237,8 +245,14 @@ def get_spring_moment(frame1, frame2, alpha=0):
     moment = -k * (theta - ref_spring_theta) * frame1.z
     return moment
 
-
 def get_angle(frame1, frame2):
+    angle = sp.acos(mech.dot(frame1.y, frame2.y)).evalf()
+    projection = frame1.y.express(frame2).args[0][0][0] // abs(frame1.y.express(frame2).args[0][0][0]) # If the y axis of the panel has a non-zero projection on the x-axis of the bus, it is at an angle. It falls -ve if CCW, it falls +ve if CW.
+    if projection > 0:
+        angle = -angle
+    return angle
+
+def get_angle_old(frame1, frame2):
     angle = sp.asin(mech.dot(frame1.y.express(frame2), frame2.x).evalf())
     sector = mech.dot(frame1.x, frame2.x).evalf()
     sign = sector / abs(sector)
@@ -283,11 +297,11 @@ def draw_scene(panel_ors, sat):
         tria = np.zeros((3,3))
         h = 3**(1/2)/2 * l
 
-        z_height = math.sin(alpha) * h  # Height of the piece's ends above XY plane.
+        z_height = -math.sin(alpha) * h  # Height of the piece's ends above XY plane.
         h_xy = math.cos(alpha) * h
 
         tria[0] = [0, 3**(1/2)/3 * l, 0]
-        tria[1] = [-math.cos(1/6 * math.pi)* h_xy + -1/4 * l,
+        tria[1] = [(-math.cos(1/6 * math.pi)* h_xy - 1/4 * l),
                     math.sin(1/6 * math.pi) * h_xy + 3**(1/2)/12 * l,
                     z_height]
         tria[2] = [-l/2, - 3**(1/2)/3 * 0.5 * l, 0]
@@ -320,12 +334,12 @@ def draw_scene(panel_ors, sat):
         timeElapsed = "{:.2f}".format(panel_ors["1"].x_axis[num]).zfill(timeStampLen)
         timeLabel.set_text("t = "+timeElapsed+" seconds")
         frameRef = animation_id+"_"+str(str(num).zfill(4))
-        print("frame ref is "+frameRef)
         fname = "fourth\\frames\\"+frameRef+".png"
+        '''
         if not os.path.isfile(fname):
             print("Saving file "+fname)
             fig.savefig(fname)
-
+        '''
         
     # Attaching 3D axis to the figure
     fig = plt.figure()
