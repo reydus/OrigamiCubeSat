@@ -44,8 +44,8 @@ def calc_torque(panel, force, bus):
         force_z = 0
     else:
         #force_z = mech.dot(force, bus.y) * sp.cos(get_angle(panel.frame, bus)) ** 2
-        force_z = (sp.cos(get_angle(panel.frame, bus))*force.magnitude())
-
+        #force_z = (sp.cos(get_angle(panel.frame, bus))*force)
+        force_z = (sp.cos(get_angle(panel.frame, bus))*force).args[0][0][1]
     # If the light hits on the back of the panel, discount force caused by a state of 1.
     if force_z < 0:
         force_z = force_z / (1+panel.state)  
@@ -64,7 +64,7 @@ def main():
     panel_ors["1"] = Panel(
         dimensions=5,
         frame = bus.orientnew("panel"+str(1), "Axis", [theta_zero, bus.z]),
-        state = 0
+        state = 1
         )
     order.append(panel_ors["1"].frame)
     '''
@@ -105,12 +105,14 @@ def main():
         bus_location = 1.5 * sun.x # location in AU referenced on the sun frame.
         omega_0 = 0 * panel.frame.z
         spring_trigger= 0
-        hubForce = panel_ors["1"].area * calc_srp(bus_location, bus) # Simulate hub as a de-activated panel.
+
+        panel.hubState = 0
+        panel.hubForce = panel_ors["1"].area * calc_srp(bus_location, bus) * (1+panel.hubState) # Simulate hub as a de-activated panel.
 
 
         while True:
             f = panel.area * calc_srp(bus_location, bus) * sp.cos(get_angle(panel.frame, bus)) * (1+panel.state)
-            f = f - hubForce  # Panel moves relative to the hub, so the force must be the difference of the two forces.
+            f = f - panel.hubForce  # Panel moves relative to the hub, so the force must be the difference of the two forces.
             angled_force = calc_torque(panel, f, bus)
 
 
@@ -156,7 +158,7 @@ def main():
     for i in panel_ors:
         totalForce += panel_ors[i].y_axis_force[-1]
     
-    totalForce += mech.dot(hubForce, bus.y)
+    totalForce += mech.dot(panel_ors["1"].hubForce, bus.y)
 
     
     print("Total force due to SRP: "+str(totalForce)+" Newtons")
@@ -364,7 +366,11 @@ def draw_scene(panel_ors, sat):
     hubcoor[2] = [l/2, - 3**(1/2)/3 * 0.5 * l, 0]
 
     hub = p3.art3d.Poly3DCollection([hubcoor])
-    hub.set_color("darkgray")
+    if panel_ors["1"].hubState == 1:
+        hub.set_color("blue")
+    else:
+        hub.set_color("cornflowerblue")
+    
     hub.set_edgecolor("k")
     ax.add_collection3d(hub)
 
