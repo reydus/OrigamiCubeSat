@@ -45,16 +45,17 @@ def calc_torque(panel, force, bus):
     else:
         #force_z = mech.dot(force, bus.y) * sp.cos(get_angle(panel.frame, bus)) ** 2
         force_z = (sp.cos(get_angle(panel.frame, bus))*force.magnitude())
-    # If the light hits on the front of the panel, use state to determine a coefficient of reflection.
-    if force_z > 0:
-        force_z = force_z * (1+panel.state)  
+
+    # If the light hits on the back of the panel, discount force caused by a state of 1.
+    if force_z < 0:
+        force_z = force_z / (1+panel.state)  
     #force_z = mech.dot(force, panel.frame.y).evalf()
     torque_zz = - panel.dimensions[0]*3**(1/2)/6 * force_z
     panel.torque = 0*panel.frame.y + 0*panel.frame.x + torque_zz*panel.frame.z
     return force_z
 
 def main():
-    theta_zero = 100/180 * sp.pi#10/180 * sp.pi
+    theta_zero = 0 * 100/180 * sp.pi#10/180 * sp.pi
     bus = sun.orientnew("bus", "Axis", [angle_to_sun, sun.z])
     order = [bus]
 
@@ -104,10 +105,15 @@ def main():
         bus_location = 1.5 * sun.x # location in AU referenced on the sun frame.
         omega_0 = 0 * panel.frame.z
         spring_trigger= 0
+        hubForce = panel_ors["1"].area * calc_srp(bus_location, bus) # Simulate hub as a de-activated panel.
+
 
         while True:
-            f = panel.area * (1+panel.state)* calc_srp(bus_location, bus) * sp.cos(get_angle(panel.frame, bus))
+            f = panel.area * calc_srp(bus_location, bus) * sp.cos(get_angle(panel.frame, bus)) * (1+panel.state)
+            f = f - hubForce  # Panel moves relative to the hub, so the force must be the difference of the two forces.
             angled_force = calc_torque(panel, f, bus)
+
+
 
             spring = get_spring_moment(panel.frame, bus)
             damper = get_joint_damper_monent(omega_0, panel.frame)
@@ -149,7 +155,7 @@ def main():
     totalForce = 0
     for i in panel_ors:
         totalForce += panel_ors[i].y_axis_force[-1]
-    hubForce = panel_ors["1"].area * calc_srp(bus_location, bus) # Simulate hub as a de-activated panel.
+    
     totalForce += mech.dot(hubForce, bus.y)
 
     
@@ -239,7 +245,7 @@ def get_joint_damper_monent(omega, frame):
     return damper_moment
 
 def get_spring_moment(frame1, frame2, alpha=0):
-    k = 100 * 4.29E-6 # spring constant. N*M/rad
+    k = 9.5E-4 #100 * 4.29E-6 # spring constant. N*M/rad
     ref_spring_theta = 0 # rads
     theta = get_angle(frame1, frame2)
     moment = -k * (theta - ref_spring_theta) * frame1.z
@@ -247,7 +253,11 @@ def get_spring_moment(frame1, frame2, alpha=0):
 
 def get_angle(frame1, frame2):
     angle = sp.acos(mech.dot(frame1.y, frame2.y)).evalf()
-    projection = frame1.y.express(frame2).args[0][0][0] // abs(frame1.y.express(frame2).args[0][0][0]) # If the y axis of the panel has a non-zero projection on the x-axis of the bus, it is at an angle. It falls -ve if CCW, it falls +ve if CW.
+    try:
+        projection = frame1.y.express(frame2).args[0][0][0] // abs(frame1.y.express(frame2).args[0][0][0]) # If the y axis of the panel has a non-zero projection on the x-axis of the bus, it is at an angle. It falls -ve if CCW, it falls +ve if CW.
+    except ZeroDivisionError:
+        projection = 1 # if the angle of the panel is perfectly 0, assume CW direction.
+
     if projection > 0:
         angle = -angle
     return angle
