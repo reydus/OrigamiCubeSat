@@ -45,7 +45,10 @@ def calc_torque(panel, force, bus):
     else:
         #force_z = mech.dot(force, bus.y) * sp.cos(get_angle(panel.frame, bus)) ** 2
         #force_z = (sp.cos(get_angle(panel.frame, bus))*force)
-        force_z = (sp.cos(get_angle(panel.frame, bus))*force).args[0][0][1]
+        try:
+            force_z = (sp.cos(get_angle(panel.frame, bus))*force).args[0][0][1]
+        except IndexError:
+            force_z = 0 
     # If the light hits on the back of the panel, discount force caused by a state of 1.
     if force_z < 0:
         force_z = force_z / (1+panel.state)  
@@ -55,7 +58,7 @@ def calc_torque(panel, force, bus):
     return force_z
 
 def main():
-    theta_zero = 0 * 100/180 * sp.pi#10/180 * sp.pi
+    theta_zero = 0 * 120/180 * sp.pi#10/180 * sp.pi
     bus = sun.orientnew("bus", "Axis", [angle_to_sun, sun.z])
     order = [bus]
 
@@ -67,21 +70,21 @@ def main():
         state = 1
         )
     order.append(panel_ors["1"].frame)
-    '''
+    
     panel_ors["2"] = Panel(
         dimensions=5,
         frame = bus.orientnew("panel"+str(2), "Axis", [theta_zero, bus.z]),
         state = 1
         )
     order.append(panel_ors["2"].frame)
-
+    
     panel_ors["3"] = Panel(
         dimensions=5,
         frame = bus.orientnew("panel"+str(3), "Axis", [theta_zero, bus.z]),
-        state = 0
+        state = 1
         )
     order.append(panel_ors["3"].frame)
-    '''
+    
     
     upd = 3.6**-1 # hertz
     t= 1/upd
@@ -97,6 +100,7 @@ def main():
         theta = get_angle(panel.frame, bus) * panel.frame.z
         panel.y_axis_theta = []
         panel.y_axis_force = []
+        panel.y_axis_force_absolute = []
         panel.y_axis_moment_srp = []
         panel.y_axis_moment_spr = []
         panel.y_axis_moment_dam = []
@@ -111,8 +115,16 @@ def main():
 
 
         while True:
-            f = panel.area * calc_srp(bus_location, bus) * sp.cos(get_angle(panel.frame, bus)) * (1+panel.state)
+            f = panel.area * calc_srp(bus_location, bus) * abs(sp.cos(get_angle(panel.frame, bus)))
+            if get_angle(panel.frame, bus) < sp.pi/2:
+                f = f * (1+panel.state)
+
+            angled_force = calc_torque(panel, f, bus)
+            panel.y_axis_force_absolute.append(angled_force)
+            
             f = f - panel.hubForce  # Panel moves relative to the hub, so the force must be the difference of the two forces.
+            if type(f) != sp.physics.vector.vector.Vector and f == 0:
+                f = 0 * bus.y
             angled_force = calc_torque(panel, f, bus)
 
 
@@ -156,7 +168,7 @@ def main():
     # Print total pressure force felt.
     totalForce = 0
     for i in panel_ors:
-        totalForce += panel_ors[i].y_axis_force[-1]
+        totalForce += panel_ors[i].y_axis_force_absolute[-1]
     
     totalForce += mech.dot(panel_ors["1"].hubForce, bus.y)
 
@@ -242,7 +254,7 @@ def threshold(a, b, thresh=0.0001):
     return  a > (b-thresh) and a < (b+thresh)
 
 def get_joint_damper_monent(omega, frame):
-    c = 100 * 1.57E-4 # for a damp of 0.45, Dampening = C/(2*sqrt(MOI*k))
+    c = 0.0277 # for a damp of 0.45, Dampening = C/(2*sqrt(MOI*k)) 
     damper_moment = -c * omega
     return damper_moment
 
@@ -399,7 +411,7 @@ def draw_scene(panel_ors, sat):
 
     
     timeStampLen = len(str(int(panel_ors["1"].x_axis[-1] // 1 + 1))) + 3 # number of digits of last timestamp rounded up to the highest unit, plus one period plus 2 decimal digits.
-    fig.savefig("fourth\\frames\\test frame.png")
+    #fig.savefig("fourth\\frames\\test frame.png")
     # Creating the Animation object
     line_ani = animation.FuncAnimation(fig, update_lines, panel_ors["1"].iterations, fargs=(panel_ors,),
                                    interval=50, blit=False)
